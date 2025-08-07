@@ -58,5 +58,9 @@ export class NativeCameraComponent implements OnInit {
   retakeVideo(): void {
     this.videoFile = null;
     this.videoPreviewUrl = null;
+         setTimeout(() => {
+      console.log(this.videoInputRef);
+         this.videoInputRef.nativeElement.click();
+     },1000);
   }
 }
