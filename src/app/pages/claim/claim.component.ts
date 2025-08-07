@@ -26,6 +26,7 @@ export class ClaimComponent {
     dialogRef.afterClosed().subscribe((videoFile: File) => {
       if (videoFile) {
         this.videoUrl = URL.createObjectURL(videoFile); // Direct preview
+        console.log(videoFile);
       }
     });
   }

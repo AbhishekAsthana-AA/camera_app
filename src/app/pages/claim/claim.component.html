@@ -3,5 +3,6 @@
 
     <div *ngIf="videoUrl" style="margin-top: 20px;">
       <p>Video Preview:</p>
+      {{videoUrl}}
       <video [src]="videoUrl" width="320" height="240" controls></video>
     </div>
