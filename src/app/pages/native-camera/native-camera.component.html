@@ -1,0 +1,20 @@
+ <h2>Record Video</h2>
+
+    <div *ngIf="!videoPreviewUrl">
+      <input
+  #videoInput
+  type="file"
+  accept="video/*"
+  capture
+  (change)="handleVideoInput($event)"
+  hidden
+/>
+      <p *ngIf="error" style="color: red;">{{ error }}</p>
+    </div>
+
+    <div *ngIf="videoPreviewUrl">
+      <video [src]="videoPreviewUrl" width="320" height="240" controls></video>
+      <br />
+      <button mat-button color="primary" (click)="submitVideo()">Use This</button>
+      <button mat-button color="warn" (click)="retakeVideo()">Retake</button>
+    </div>

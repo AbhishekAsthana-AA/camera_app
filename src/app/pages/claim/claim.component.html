@@ -1,0 +1,7 @@
+ <h2>Claim Component</h2>
+    <button mat-raised-button color="primary" (click)="openCameraDialog()">Claim Photo</button>
+
+    <div *ngIf="videoUrl" style="margin-top: 20px;">
+      <p>Video Preview:</p>
+      <video [src]="videoUrl" width="320" height="240" controls></video>
+    </div>
