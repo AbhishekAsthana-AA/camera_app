@@ -1,0 +1,28 @@
+<!-- <video #videoElem id="video" autoplay playsinline muted></video>
+<canvas #overlayCanvas id="overlay"></canvas>
+
+<button (click)="captureDetectedObject()" class="capture-btn">
+  Capture
+</button> -->
+
+
+<div class="wrapper">
+  <!-- LIVE VIDEO -->
+  <video #videoElem id="video" autoplay playsinline muted *ngIf="!capturedImage"></video>
+  <canvas #overlayCanvas id="overlay" *ngIf="!capturedImage"></canvas>
+
+  <!-- CAPTURE BUTTON (Only when not previewing) -->
+  <button *ngIf="!capturedImage" (click)="captureDetectedObject()" class="capture-btn">
+    Capture
+  </button>
+
+  <!-- PREVIEW UI -->
+  <div class="preview-box" *ngIf="capturedImage">
+    <img [src]="capturedImage" class="preview-img" />
+
+    <div class="preview-actions">
+      <button class="btn" (click)="retake()">Retake</button>
+      <button class="btn primary" (click)="confirmCapture()">Use Photo</button>
+    </div>
+  </div>
+</div>
