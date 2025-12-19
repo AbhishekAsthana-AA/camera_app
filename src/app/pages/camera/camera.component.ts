@@ -241,6 +241,7 @@
 import {
   Component,
   ElementRef,
+  NgZone,
   OnDestroy,
   OnInit,
   ViewChild
@@ -256,251 +257,429 @@ import * as cocoSSD from '@tensorflow-models/coco-ssd';
   templateUrl: './camera.component.html',
   styleUrl: './camera.component.css'
 })
+// export class CameraComponent implements OnInit, OnDestroy {
+
+//   @ViewChild('video', { static: true })
+//   videoRef!: ElementRef<HTMLVideoElement>;
+
+//   @ViewChild('canvas', { static: true })
+//   canvasRef!: ElementRef<HTMLCanvasElement>;
+
+//   private stream!: MediaStream;
+//   private model!: cocoSSD.ObjectDetection;
+
+//   loading = true;
+//   private running = true;
+
+//   // 🔒 Focus + stability
+//   private focusedObject: cocoSSD.DetectedObject | null = null;
+//   private focusLostFrames = 0;
+//   private smoothedBox: number[] | null = null;
+
+//   async ngOnInit() {
+//     // await tf.setBackend('webgl');
+//     try {
+//   await tf.setBackend('webgl');
+// } catch {
+//   await tf.setBackend('cpu');
+// }
+// await tf.ready();
+//     await tf.ready();
+//     await this.initCamera();
+//   }
+
+//   async initCamera() {
+//     const video = this.videoRef.nativeElement;
+
+//     this.stream = await navigator.mediaDevices.getUserMedia({
+//       video: {
+//         facingMode: 'environment',
+//         width: { ideal: 640 },
+//         height: { ideal: 480 },
+//         frameRate: { max: 15 }
+//       },
+//       audio: false
+//     });
+
+//     video.srcObject = this.stream;
+
+//     video.onloadedmetadata = async () => {
+//       await video.play();
+
+//       if (video.videoWidth === 0) return;
+
+//       this.model = await cocoSSD.load({
+//         base: 'lite_mobilenet_v2'
+//       });
+
+//       this.loading = false;
+//       this.detectLoop();
+//     };
+//   }
+
+//   // detectLoop() {
+//   //   if (!this.running) return;
+
+//   //   const video = this.videoRef.nativeElement;
+
+//   //   if (video.videoWidth === 0 || video.videoHeight === 0) {
+//   //     requestAnimationFrame(() => this.detectLoop());
+//   //     return;
+//   //   }
+
+//   //   this.model.detect(video).then(predictions => {
+//   //     const focused = this.getFocusedObject(
+//   //       predictions,
+//   //       video.videoWidth,
+//   //       video.videoHeight
+//   //     );
+
+//   //     if (focused) {
+//   //       this.focusedObject = focused;
+//   //       this.focusLostFrames = 0;
+//   //     } else {
+//   //       this.focusLostFrames++;
+//   //       if (this.focusLostFrames > 12) {
+//   //         this.focusedObject = null;
+//   //         this.smoothedBox = null;
+//   //       }
+//   //     }
+
+//   //     if (this.focusedObject) {
+//   //       this.renderFocused(this.focusedObject);
+//   //     }
+
+//   //     requestAnimationFrame(() => this.detectLoop());
+//   //   });
+//   // }
+
+
+//   detectLoop() {
+//   if (!this.running) return;
+
+//   const video = this.videoRef.nativeElement;
+
+//   if (
+//     video.readyState < 3 ||
+//     video.videoWidth === 0 ||
+//     video.videoHeight === 0
+//   ) {
+//     setTimeout(() => this.detectLoop(), 100);
+//     return;
+//   }
+
+//   this.model.detect(video).then(predictions => {
+//     const focused = this.getFocusedObject(
+//       predictions,
+//       video.videoWidth,
+//       video.videoHeight
+//     );
+
+//     if (focused) {
+//       this.focusedObject = focused;
+//       this.focusLostFrames = 0;
+//       this.renderFocused(focused);
+//     } else {
+//       this.focusLostFrames++;
+//       if (this.focusLostFrames > 15) {
+//         this.focusedObject = null;
+//         this.smoothedBox = null;
+//       }
+//     }
+
+//     setTimeout(() => this.detectLoop(), 80); // ANDROID SAFE
+//   });
+// }
+
+
+//   // 🎯 pick ONE object (center + confidence)
+//   getFocusedObject(
+//     preds: cocoSSD.DetectedObject[],
+//     vw: number,
+//     vh: number
+//   ): cocoSSD.DetectedObject | null {
+
+//     const cx = vw / 2;
+//     const cy = vh / 2;
+
+//     let best: cocoSSD.DetectedObject | null = null;
+//     let bestScore = Infinity;
+
+//     preds.forEach(p => {  
+//       if ((p.score ?? 0) < 0.6) return;
+
+//       const [x, y, w, h] = p.bbox;
+//       const ox = x + w / 2;
+//       const oy = y + h / 2;
+
+//       const dist = Math.hypot(cx - ox, cy - oy);
+
+//       if (dist < bestScore) {
+//         bestScore = dist;
+//         best = p;
+//       }
+//     });
+
+//     return best;
+//   }
+
+//   // 🧊 smooth jitter
+//   smoothBBox(box: number[], alpha = 0.85): number[] {
+//     if (!this.smoothedBox) {
+//       this.smoothedBox = [...box];
+//       return box;
+//     }
+
+//     this.smoothedBox = this.smoothedBox.map(
+//       (v, i) => v * alpha + box[i] * (1 - alpha)
+//     );
+
+//     return this.smoothedBox;
+//   }
+
+//   renderFocused(pred: cocoSSD.DetectedObject) {
+//     const canvas = this.canvasRef.nativeElement;
+//     const ctx = canvas.getContext('2d')!;
+//     const video = this.videoRef.nativeElement;
+
+//     canvas.width = video.videoWidth;
+//     canvas.height = video.videoHeight;
+
+//     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+//     const bbox = this.smoothBBox(pred.bbox);
+//     const [x, y, w, h] = bbox;
+
+//     const type = this.getOverlayType(w, h);
+
+//     ctx.strokeStyle = '#00FFFF';
+//     ctx.lineWidth = 3;
+
+//     switch (type) {
+//       case 'circle':
+//         this.drawCircle(ctx, x, y, w, h);
+//         break;
+//       case 'horizontal':
+//         this.drawHorizontalRect(ctx, x, y, w, h);
+//         break;
+//       case 'vertical':
+//         this.drawVerticalRect(ctx, x, y, w, h);
+//         break;
+//       default:
+//         ctx.strokeRect(x, y, w, h);
+//     }
+
+//     ctx.fillStyle = '#00FFFF';
+//     ctx.font = '14px sans-serif';
+//     ctx.fillText(pred.class, x + 4, y - 6);
+//   }
+
+//   // 🔍 shape logic
+//   getOverlayType(w: number, h: number) {
+//     const aspect = w / h;
+//     if (Math.abs(aspect - 1) < 0.25) return 'circle';
+//     if (aspect > 1.4) return 'horizontal';
+//     if (aspect < 0.7) return 'vertical';
+//     return 'rectangle';
+//   }
+
+//   drawCircle(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+//     const r = Math.min(w, h) / 2;
+//     ctx.beginPath();
+//     ctx.arc(x + w / 2, y + h / 2, r, 0, Math.PI * 2);
+//     ctx.stroke();
+//   }
+
+//   drawHorizontalRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+//     const pad = h * 0.15;
+//     ctx.strokeRect(x, y + pad, w, h - pad * 2);
+//   }
+
+//   drawVerticalRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+//     const pad = w * 0.15;
+//     ctx.strokeRect(x + pad, y, w - pad * 2, h);
+//   }
+
+//   ngOnDestroy() {
+//     this.running = false;
+//     this.stream?.getTracks().forEach(t => t.stop());
+//   }
+// }
+
 export class CameraComponent implements OnInit, OnDestroy {
-
-  @ViewChild('video', { static: true })
-  videoRef!: ElementRef<HTMLVideoElement>;
-
-  @ViewChild('canvas', { static: true })
-  canvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('video', { static: true }) videoRef!: ElementRef<HTMLVideoElement>;
+  @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
   private stream!: MediaStream;
   private model!: cocoSSD.ObjectDetection;
-
-  loading = true;
   private running = true;
+  loading = true;
 
-  // 🔒 Focus + stability
+  // Stability state
   private focusedObject: cocoSSD.DetectedObject | null = null;
   private focusLostFrames = 0;
   private smoothedBox: number[] | null = null;
 
+  constructor(private ngZone: NgZone) { }
+
   async ngOnInit() {
-    // await tf.setBackend('webgl');
+    // Force WebGL for hardware acceleration (crucial for Android)
     try {
-  await tf.setBackend('webgl');
-} catch {
-  await tf.setBackend('cpu');
-}
-await tf.ready();
-    await tf.ready();
+      await tf.setBackend('webgl');
+      await tf.ready();
+    } catch (e) {
+      console.warn("WebGL failed, using CPU (will be slow)");
+      await tf.setBackend('cpu');
+    }
     await this.initCamera();
   }
 
   async initCamera() {
     const video = this.videoRef.nativeElement;
 
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: 'environment',
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        frameRate: { max: 15 }
-      },
-      audio: false
-    });
-
-    video.srcObject = this.stream;
-
-    video.onloadedmetadata = async () => {
-      await video.play();
-
-      if (video.videoWidth === 0) return;
-
-      this.model = await cocoSSD.load({
-        base: 'lite_mobilenet_v2'
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 480 }, // Lowering resolution from 640 to 480 significantly boosts FPS
+          height: { ideal: 360 },
+          frameRate: { ideal: 20 }
+        },
+        audio: false
       });
+      video.srcObject = this.stream;
 
-      this.loading = false;
-      this.detectLoop();
-    };
+      video.onloadedmetadata = async () => {
+        await video.play();
+
+        // Load the lite model (essential for mobile performance)
+        this.model = await cocoSSD.load({ base: 'lite_mobilenet_v2' });
+
+        // Update UI inside Angular Zone one last time to hide loader
+        this.ngZone.run(() => { this.loading = false; });
+
+        // START LOOP OUTSIDE ANGULAR ZONE
+        this.ngZone.runOutsideAngular(() => {
+          this.detectLoop();
+        });
+      };
+    } catch (err) {
+      console.error("Camera error:", err);
+    }
   }
 
-  // detectLoop() {
-  //   if (!this.running) return;
+  private async detectLoop() {
+    if (!this.running) return;
 
-  //   const video = this.videoRef.nativeElement;
+    const video = this.videoRef.nativeElement;
 
-  //   if (video.videoWidth === 0 || video.videoHeight === 0) {
-  //     requestAnimationFrame(() => this.detectLoop());
-  //     return;
-  //   }
-
-  //   this.model.detect(video).then(predictions => {
-  //     const focused = this.getFocusedObject(
-  //       predictions,
-  //       video.videoWidth,
-  //       video.videoHeight
-  //     );
-
-  //     if (focused) {
-  //       this.focusedObject = focused;
-  //       this.focusLostFrames = 0;
-  //     } else {
-  //       this.focusLostFrames++;
-  //       if (this.focusLostFrames > 12) {
-  //         this.focusedObject = null;
-  //         this.smoothedBox = null;
-  //       }
-  //     }
-
-  //     if (this.focusedObject) {
-  //       this.renderFocused(this.focusedObject);
-  //     }
-
-  //     requestAnimationFrame(() => this.detectLoop());
-  //   });
-  // }
-
-
-  detectLoop() {
-  if (!this.running) return;
-
-  const video = this.videoRef.nativeElement;
-
-  if (
-    video.readyState < 3 ||
-    video.videoWidth === 0 ||
-    video.videoHeight === 0
-  ) {
-    setTimeout(() => this.detectLoop(), 100);
-    return;
-  }
-
-  this.model.detect(video).then(predictions => {
-    const focused = this.getFocusedObject(
-      predictions,
-      video.videoWidth,
-      video.videoHeight
-    );
-
-    if (focused) {
-      this.focusedObject = focused;
-      this.focusLostFrames = 0;
-      this.renderFocused(focused);
-    } else {
-      this.focusLostFrames++;
-      if (this.focusLostFrames > 15) {
-        this.focusedObject = null;
-        this.smoothedBox = null;
-      }
+    // 1. Check if video is actually playing and ready
+    if (video.readyState < 2 || video.videoWidth === 0) {
+      requestAnimationFrame(() => this.detectLoop());
+      return;
     }
 
-    setTimeout(() => this.detectLoop(), 80); // ANDROID SAFE
-  });
-}
+    // 2. Create the tensor manually from the video
+    const pixels = tf.browser.fromPixels(video);
 
+    try {
+      // 3. Pass the manual tensor to detect() instead of the video element
+      const predictions = await this.model.detect(pixels);
 
-  // 🎯 pick ONE object (center + confidence)
-  getFocusedObject(
-    preds: cocoSSD.DetectedObject[],
-    vw: number,
-    vh: number
-  ): cocoSSD.DetectedObject | null {
+      const focused = this.getFocusedObject(
+        predictions,
+        video.videoWidth,
+        video.videoHeight
+      );
 
+      if (focused) {
+        this.focusedObject = focused;
+        this.focusLostFrames = 0;
+        this.renderFocused(focused);
+      } else {
+        this.focusLostFrames++;
+        if (this.focusLostFrames > 15) {
+          this.focusedObject = null;
+          this.smoothedBox = null;
+          this.clearCanvas();
+        }
+      }
+    } catch (err) {
+      console.error("Detection error:", err);
+    } finally {
+      // 4. CRITICAL: Manually dispose the tensor to prevent the "backend undefined" error 
+      // and memory leaks on Android
+      pixels.dispose();
+    }
+
+    // 5. Schedule next frame
+    requestAnimationFrame(() => this.detectLoop());
+  }
+
+  private getFocusedObject(preds: cocoSSD.DetectedObject[], vw: number, vh: number): cocoSSD.DetectedObject | null {
     const cx = vw / 2;
     const cy = vh / 2;
-
     let best: cocoSSD.DetectedObject | null = null;
-    let bestScore = Infinity;
+    let minDistance = Infinity;
 
-    preds.forEach(p => {  
-      if ((p.score ?? 0) < 0.6) return;
-
+    preds.forEach(p => {
+      if ((p.score ?? 0) < 0.55) return; // Confidence threshold
       const [x, y, w, h] = p.bbox;
       const ox = x + w / 2;
       const oy = y + h / 2;
-
       const dist = Math.hypot(cx - ox, cy - oy);
-
-      if (dist < bestScore) {
-        bestScore = dist;
+      if (dist < minDistance) {
+        minDistance = dist;
         best = p;
       }
     });
-
     return best;
   }
 
-  // 🧊 smooth jitter
-  smoothBBox(box: number[], alpha = 0.85): number[] {
-    if (!this.smoothedBox) {
-      this.smoothedBox = [...box];
-      return box;
-    }
-
-    this.smoothedBox = this.smoothedBox.map(
-      (v, i) => v * alpha + box[i] * (1 - alpha)
-    );
-
-    return this.smoothedBox;
-  }
-
-  renderFocused(pred: cocoSSD.DetectedObject) {
+  private renderFocused(pred: cocoSSD.DetectedObject) {
     const canvas = this.canvasRef.nativeElement;
     const ctx = canvas.getContext('2d')!;
     const video = this.videoRef.nativeElement;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Only update canvas dimensions if they changed to save CPU
+    if (canvas.width !== video.videoWidth) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const bbox = this.smoothBBox(pred.bbox);
-    const [x, y, w, h] = bbox;
+    const [x, y, w, h] = this.smoothBBox(pred.bbox);
 
-    const type = this.getOverlayType(w, h);
+    // Drawing styles
+    ctx.strokeStyle = '#00FF00';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(x, y, w, h);
 
-    ctx.strokeStyle = '#00FFFF';
-    ctx.lineWidth = 3;
+    ctx.fillStyle = '#00FF00';
+    ctx.font = '18px Arial';
+    ctx.fillText(`${pred.class} (${Math.round(pred.score * 100)}%)`, x, y > 20 ? y - 10 : y + 20);
+  }
 
-    switch (type) {
-      case 'circle':
-        this.drawCircle(ctx, x, y, w, h);
-        break;
-      case 'horizontal':
-        this.drawHorizontalRect(ctx, x, y, w, h);
-        break;
-      case 'vertical':
-        this.drawVerticalRect(ctx, x, y, w, h);
-        break;
-      default:
-        ctx.strokeRect(x, y, w, h);
+  private smoothBBox(box: number[], alpha = 0.75): number[] {
+    if (!this.smoothedBox) {
+      this.smoothedBox = [...box];
+      return box;
     }
-
-    ctx.fillStyle = '#00FFFF';
-    ctx.font = '14px sans-serif';
-    ctx.fillText(pred.class, x + 4, y - 6);
+    this.smoothedBox = this.smoothedBox.map((v, i) => v * alpha + box[i] * (1 - alpha));
+    return this.smoothedBox;
   }
 
-  // 🔍 shape logic
-  getOverlayType(w: number, h: number) {
-    const aspect = w / h;
-    if (Math.abs(aspect - 1) < 0.25) return 'circle';
-    if (aspect > 1.4) return 'horizontal';
-    if (aspect < 0.7) return 'vertical';
-    return 'rectangle';
-  }
-
-  drawCircle(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-    const r = Math.min(w, h) / 2;
-    ctx.beginPath();
-    ctx.arc(x + w / 2, y + h / 2, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  drawHorizontalRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-    const pad = h * 0.15;
-    ctx.strokeRect(x, y + pad, w, h - pad * 2);
-  }
-
-  drawVerticalRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-    const pad = w * 0.15;
-    ctx.strokeRect(x + pad, y, w - pad * 2, h);
+  private clearCanvas() {
+    const canvas = this.canvasRef.nativeElement;
+    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   ngOnDestroy() {
     this.running = false;
     this.stream?.getTracks().forEach(t => t.stop());
+    if (this.model) {
+      this.model.dispose(); // Manually free model memory on exit
+    }
   }
 }
