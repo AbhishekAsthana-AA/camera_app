@@ -404,7 +404,7 @@ await tf.ready();
     let best: cocoSSD.DetectedObject | null = null;
     let bestScore = Infinity;
 
-    preds.forEach(p => {
+    preds.forEach(p => {  
       if ((p.score ?? 0) < 0.6) return;
 
       const [x, y, w, h] = p.bbox;
