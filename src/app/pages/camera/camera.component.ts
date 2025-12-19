@@ -276,7 +276,13 @@ export class CameraComponent implements OnInit, OnDestroy {
   private smoothedBox: number[] | null = null;
 
   async ngOnInit() {
-    await tf.setBackend('webgl');
+    // await tf.setBackend('webgl');
+    try {
+  await tf.setBackend('webgl');
+} catch {
+  await tf.setBackend('cpu');
+}
+await tf.ready();
     await tf.ready();
     await this.initCamera();
   }
@@ -285,7 +291,12 @@ export class CameraComponent implements OnInit, OnDestroy {
     const video = this.videoRef.nativeElement;
 
     this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' },
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { max: 15 }
+      },
       audio: false
     });
 
@@ -305,41 +316,80 @@ export class CameraComponent implements OnInit, OnDestroy {
     };
   }
 
+  // detectLoop() {
+  //   if (!this.running) return;
+
+  //   const video = this.videoRef.nativeElement;
+
+  //   if (video.videoWidth === 0 || video.videoHeight === 0) {
+  //     requestAnimationFrame(() => this.detectLoop());
+  //     return;
+  //   }
+
+  //   this.model.detect(video).then(predictions => {
+  //     const focused = this.getFocusedObject(
+  //       predictions,
+  //       video.videoWidth,
+  //       video.videoHeight
+  //     );
+
+  //     if (focused) {
+  //       this.focusedObject = focused;
+  //       this.focusLostFrames = 0;
+  //     } else {
+  //       this.focusLostFrames++;
+  //       if (this.focusLostFrames > 12) {
+  //         this.focusedObject = null;
+  //         this.smoothedBox = null;
+  //       }
+  //     }
+
+  //     if (this.focusedObject) {
+  //       this.renderFocused(this.focusedObject);
+  //     }
+
+  //     requestAnimationFrame(() => this.detectLoop());
+  //   });
+  // }
+
+
   detectLoop() {
-    if (!this.running) return;
+  if (!this.running) return;
 
-    const video = this.videoRef.nativeElement;
+  const video = this.videoRef.nativeElement;
 
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      requestAnimationFrame(() => this.detectLoop());
-      return;
+  if (
+    video.readyState < 3 ||
+    video.videoWidth === 0 ||
+    video.videoHeight === 0
+  ) {
+    setTimeout(() => this.detectLoop(), 100);
+    return;
+  }
+
+  this.model.detect(video).then(predictions => {
+    const focused = this.getFocusedObject(
+      predictions,
+      video.videoWidth,
+      video.videoHeight
+    );
+
+    if (focused) {
+      this.focusedObject = focused;
+      this.focusLostFrames = 0;
+      this.renderFocused(focused);
+    } else {
+      this.focusLostFrames++;
+      if (this.focusLostFrames > 15) {
+        this.focusedObject = null;
+        this.smoothedBox = null;
+      }
     }
 
-    this.model.detect(video).then(predictions => {
-      const focused = this.getFocusedObject(
-        predictions,
-        video.videoWidth,
-        video.videoHeight
-      );
+    setTimeout(() => this.detectLoop(), 80); // ANDROID SAFE
+  });
+}
 
-      if (focused) {
-        this.focusedObject = focused;
-        this.focusLostFrames = 0;
-      } else {
-        this.focusLostFrames++;
-        if (this.focusLostFrames > 12) {
-          this.focusedObject = null;
-          this.smoothedBox = null;
-        }
-      }
-
-      if (this.focusedObject) {
-        this.renderFocused(this.focusedObject);
-      }
-
-      requestAnimationFrame(() => this.detectLoop());
-    });
-  }
 
   // 🎯 pick ONE object (center + confidence)
   getFocusedObject(
@@ -354,7 +404,7 @@ export class CameraComponent implements OnInit, OnDestroy {
     let best: cocoSSD.DetectedObject | null = null;
     let bestScore = Infinity;
 
-    preds.forEach(p => {
+    preds.forEach(p => {  
       if ((p.score ?? 0) < 0.6) return;
 
       const [x, y, w, h] = p.bbox;
