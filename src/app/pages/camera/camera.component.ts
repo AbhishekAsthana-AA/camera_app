@@ -86,7 +86,7 @@ export class CameraComponent implements OnInit, OnDestroy {
     const canvas = this.canvasRef.nativeElement;
     const ctx = canvas.getContext('2d')!;
     const video = this.videoRef.nativeElement;
-
+ 
     // 🔁 Match canvas to video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
