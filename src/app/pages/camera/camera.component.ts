@@ -636,12 +636,59 @@ export class CameraComponent implements OnInit, OnDestroy {
     return best;
   }
 
+  // private renderFocused(pred: cocoSSD.DetectedObject) {
+  //   const canvas = this.canvasRef.nativeElement;
+  //   const ctx = canvas.getContext('2d')!;
+  //   const video = this.videoRef.nativeElement;
+
+  //   // Only update canvas dimensions if they changed to save CPU
+  //   if (canvas.width !== video.videoWidth) {
+  //     canvas.width = video.videoWidth;
+  //     canvas.height = video.videoHeight;
+  //   }
+
+  //   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  //   const [x, y, w, h] = this.smoothBBox(pred.bbox);
+
+  //   // Drawing styles
+  //   ctx.strokeStyle = '#00FF00';
+  //   ctx.lineWidth = 4;
+  //   ctx.strokeRect(x, y, w, h);
+
+  //   ctx.fillStyle = '#00FF00';
+  //   ctx.font = '18px Arial';
+  //   ctx.fillText(`${pred.class} (${Math.round(pred.score * 100)}%)`, x, y > 20 ? y - 10 : y + 20);
+  // }
+  private isCircleObject(
+    bbox: number[],
+    videoHeight: number
+  ): boolean {
+    const [x, y, w, h] = bbox;
+
+    const aspect = w / h;
+    const area = w * h;
+    const centerY = y + h / 2;
+
+    // Shape must be near square
+    if (Math.abs(aspect - 1) > 0.22) return false;
+
+    // Size range (small → large wheels)
+    if (w < 26 || h < 26 || area < 700) return false;
+
+    // Avoid giant false blobs
+    if (area > videoHeight * videoHeight * 0.5) return false;
+
+    // Soft vertical bias (tyres usually lower)
+    if (centerY < videoHeight * 0.3) return false;
+
+    return true;
+  }
   private renderFocused(pred: cocoSSD.DetectedObject) {
     const canvas = this.canvasRef.nativeElement;
     const ctx = canvas.getContext('2d')!;
     const video = this.videoRef.nativeElement;
 
-    // Only update canvas dimensions if they changed to save CPU
     if (canvas.width !== video.videoWidth) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -651,14 +698,31 @@ export class CameraComponent implements OnInit, OnDestroy {
 
     const [x, y, w, h] = this.smoothBBox(pred.bbox);
 
-    // Drawing styles
     ctx.strokeStyle = '#00FF00';
     ctx.lineWidth = 4;
-    ctx.strokeRect(x, y, w, h);
+
+    const isCircle = this.isCircleObject(pred.bbox, video.videoHeight);
+    console.log(isCircle)
+
+    if (isCircle) {
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const r = Math.min(w, h) / 2;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(x, y, w, h);
+    }
 
     ctx.fillStyle = '#00FF00';
     ctx.font = '18px Arial';
-    ctx.fillText(`${pred.class} (${Math.round(pred.score * 100)}%)`, x, y > 20 ? y - 10 : y + 20);
+    ctx.fillText(
+      `${pred.class} (${Math.round((pred.score ?? 0) * 100)}%)`,
+      x,
+      y > 20 ? y - 10 : y + 20
+    );
   }
 
   private smoothBBox(box: number[], alpha = 0.75): number[] {
