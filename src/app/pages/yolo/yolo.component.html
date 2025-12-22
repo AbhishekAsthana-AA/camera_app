@@ -1,0 +1,16 @@
+<div class="camera">
+  <video #video autoplay muted playsinline></video>
+  <canvas #canvas></canvas>
+</div>
+ 
+<div class="controls">
+  <button (click)="runOnce()">Capture</button>
+  <!-- <button (click)="liveDetect()">
+    {{ running ? 'Stop' : 'Live Detection' }}
+  </button>
+ 
+  <div>
+    Inference: {{ inferenceTime }} ms<br />
+    Total: {{ totalTime }} ms
+  </div> -->
+</div>
