@@ -478,88 +478,64 @@ export class MediaPipeObjectComponent implements AfterViewInit, OnDestroy {
     requestAnimationFrame(this.detectLoop);
   };
 
-  draw(result: ObjectDetectorResult, ctx: CanvasRenderingContext2D) {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+draw(result: ObjectDetectorResult, ctx: CanvasRenderingContext2D) {
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-    // 1️⃣ Draw focus guide
-    const focusArea = this.drawFocusGuide(ctx);
+  const focusArea = this.drawFocusGuide(ctx);
 
-    let candidates: any[] = [];
+  let candidates: any[] = [];
 
-    // 2️⃣ Collect objects that overlap with focus guide
-    for (const det of result.detections) {
-      if (!det.boundingBox || det.categories.length === 0) continue;
+  // 1️⃣ Collect all objects that partially or fully overlap focus guide
+  for (const det of result.detections) {
+    if (!det.boundingBox || det.categories.length === 0) continue;
 
-      const box = det.boundingBox;
-      const label = det.categories[0];
+    const box = det.boundingBox;
+    const label = det.categories[0];
 
-      if (this.overlaps(box, focusArea)) {
-        candidates.push({
-          x: box.originX,
-          y: box.originY,
-          w: box.width,
-          h: box.height,
-          label: label.categoryName,
-          score: label.score,
-        });
-      }
+    if (this.overlaps(box, focusArea)) {
+      candidates.push({
+        x: box.originX,
+        y: box.originY,
+        w: box.width,
+        h: box.height,
+        label: label.categoryName,
+        score: label.score,
+      });
     }
-
-    // 3️⃣ No candidate detected
-    if (candidates.length === 0) {
-      this.stableCounter = 0;
-      this.lostFrames++;
-
-      if (this.lostFrames > this.MAX_LOST) this.focusedBox = null;
-
-      if (this.focusedBox) this.drawBox(ctx, this.focusedBox);
-
-      return;
-    }
-
-    this.lostFrames = 0;
-
-    // 4️⃣ Lock only after object is stable
-    if (!this.focusedBox) {
-      this.stableCounter++;
-
-      if (this.stableCounter < this.MIN_STABLE_FRAMES) return;
-
-      // Pick the largest object
-      candidates.sort((a, b) => b.w * b.h - a.w * a.h);
-      this.focusedBox = candidates[0];
-      this.drawBox(ctx, this.focusedBox);
-      return;
-    }
-
-    // 5️⃣ Track focused object using IOU
-    let bestMatch: any = null;
-    let bestIou = 0;
-
-    for (const c of candidates) {
-      const iouVal = this.iou(this.focusedBox, c);
-      if (iouVal > bestIou) {
-        bestIou = iouVal;
-        bestMatch = c;
-      }
-    }
-
-    if (bestMatch && bestIou > this.IOU_THRESHOLD) {
-      this.focusedBox.x =
-        this.focusedBox.x * this.SMOOTH + bestMatch.x * (1 - this.SMOOTH);
-      this.focusedBox.y =
-        this.focusedBox.y * this.SMOOTH + bestMatch.y * (1 - this.SMOOTH);
-      this.focusedBox.w =
-        this.focusedBox.w * this.SMOOTH + bestMatch.w * (1 - this.SMOOTH);
-      this.focusedBox.h =
-        this.focusedBox.h * this.SMOOTH + bestMatch.h * (1 - this.SMOOTH);
-      this.focusedBox.score =
-        this.focusedBox.score * 0.9 + bestMatch.score * 0.1;
-      this.focusedBox.label = bestMatch.label;
-    }
-
-    this.drawBox(ctx, this.focusedBox);
   }
+
+  // 2️⃣ No candidates → slowly fade out focused box
+  if (candidates.length === 0) {
+    this.lostFrames++;
+    if (this.lostFrames > this.MAX_LOST) this.focusedBox = null;
+
+    if (this.focusedBox) this.drawBox(ctx, this.focusedBox);
+    return;
+  }
+
+  this.lostFrames = 0;
+
+  // 3️⃣ Pick the largest candidate (or first if you prefer)
+  candidates.sort((a, b) => b.w * b.h - a.w * a.h);
+  const target = candidates[0];
+
+  // 4️⃣ If no focused box yet → initialize smoothly
+  if (!this.focusedBox) {
+    this.focusedBox = { ...target }; // shallow copy
+  } else {
+    // 5️⃣ Smoothly update focused box
+    this.focusedBox.x = this.focusedBox.x * this.SMOOTH + target.x * (1 - this.SMOOTH);
+    this.focusedBox.y = this.focusedBox.y * this.SMOOTH + target.y * (1 - this.SMOOTH);
+    this.focusedBox.w = this.focusedBox.w * this.SMOOTH + target.w * (1 - this.SMOOTH);
+    this.focusedBox.h = this.focusedBox.h * this.SMOOTH + target.h * (1 - this.SMOOTH);
+    this.focusedBox.score = this.focusedBox.score * 0.9 + target.score * 0.1;
+    this.focusedBox.label = target.label;
+  }
+
+  // 6️⃣ Draw overlay
+  this.drawBox(ctx, this.focusedBox);
+}
+
 
   drawBox(ctx: CanvasRenderingContext2D, box: any) {
     ctx.strokeStyle = 'lime';
