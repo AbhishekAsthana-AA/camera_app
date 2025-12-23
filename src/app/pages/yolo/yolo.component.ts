@@ -40,8 +40,13 @@ export class YoloComponent implements AfterViewInit, OnDestroy {
   // inference throttling
   private lastInfer = 0;
   private INFER_INTERVAL = 80; // ms (~12 FPS)
-
-  constructor(private yolo: YoloService) {}
+  private focused: StableBox | null = null;
+  private LOST_FRAMES = 8;
+  private lostCounter = 0;
+  private CENTER_ALPHA = 0.8;   // position smoothing
+  private SIZE_ALPHA = 0.75;   // size smoothing
+  private MAX_MOVE = 0.08;     // max box movement per frame (normalized)
+  constructor(private yolo: YoloService) { }
 
   /* -------------------- LIFECYCLE -------------------- */
 
@@ -150,12 +155,12 @@ export class YoloComponent implements AfterViewInit, OnDestroy {
     const numAnchors = tensor.dims[2];
     const numClasses = 80;
 
-    const detections: StableBox[] = [];
+    const CONF_LOCK = 0.45;
+    const CONF_DROP = 0.20;
 
-    const CONF_ENTER = 0.35;
-    const CONF_EXIT = 0.20;
+    let best: StableBox | null = null;
 
-    /* -------- DECODE -------- */
+    /* -------- FIND BEST DETECTION -------- */
     for (let i = 0; i < numAnchors; i++) {
       let bestScore = 0;
       let bestClass = -1;
@@ -168,79 +173,103 @@ export class YoloComponent implements AfterViewInit, OnDestroy {
         }
       }
 
-      if (bestScore < CONF_ENTER) continue;
+      if (bestScore < CONF_LOCK) continue;
 
       const x = data[i];
       const y = data[numAnchors + i];
       const w = data[2 * numAnchors + i];
       const h = data[3 * numAnchors + i];
 
-      detections.push({
+      const box: StableBox = {
         box: [x - w / 2, y - h / 2, w, h],
         score: bestScore,
         classId: bestClass,
-        ttl: this.MAX_TTL,
-      });
+        ttl: 0,
+      };
+
+      if (!best || box.score > best.score) best = box;
     }
 
-    /* -------- MATCH & SMOOTH -------- */
-    const updated: StableBox[] = [];
-
-    for (const det of detections) {
-      let matched = false;
-
-      for (const prev of this.tracked) {
-        if (
-          prev.classId === det.classId &&
-          this.iou(prev.box, det.box) > this.IOU_MATCH
-        ) {
-          // smooth box
-          prev.box = prev.box.map(
-            (v, i) => v * this.SMOOTH_ALPHA + det.box[i] * (1 - this.SMOOTH_ALPHA)
-          );
-          prev.score =
-            prev.score * this.SMOOTH_ALPHA +
-            det.score * (1 - this.SMOOTH_ALPHA);
-
-          prev.ttl = this.MAX_TTL;
-          updated.push(prev);
-          matched = true;
-          break;
-        }
+    /* -------- NO DETECTION -------- */
+    if (!best) {
+      this.lostCounter++;
+      if (this.lostCounter > this.LOST_FRAMES) {
+        this.focused = null;
       }
-
-      if (!matched) updated.push(det);
+      if (this.focused) this.drawBox(ctx, this.focused, scaleX, scaleY);
+      return;
     }
 
-    /* -------- KEEP OLD (TTL) -------- */
-    for (const prev of this.tracked) {
-      if (!updated.includes(prev)) {
-        prev.ttl--;
-        if (prev.ttl > 0 && prev.score > CONF_EXIT) {
-          updated.push(prev);
-        }
+    this.lostCounter = 0;
+
+    /* -------- FIRST LOCK -------- */
+    if (!this.focused) {
+      this.focused = best;
+      this.drawBox(ctx, best, scaleX, scaleY);
+      return;
+    }
+
+    /* -------- CHECK SAME OBJECT -------- */
+    const overlap = this.iou(this.focused.box, best.box);
+
+    if (
+      overlap > 0.6 &&
+      best.classId === this.focused.classId
+    ) {
+      // Smooth update
+      // this.focused.box = this.focused.box.map(
+      //   (v, i) =>
+      //     v * this.SMOOTH_ALPHA +
+      //     best.box[i] * (1 - this.SMOOTH_ALPHA)
+      // );
+      // this.focused.score =
+      //   this.focused.score * this.SMOOTH_ALPHA +
+      //   best.score * (1 - this.SMOOTH_ALPHA);
+
+
+      const [fx, fy, fw, fh] = this.focused.box;
+      const [bx, by, bw, bh] = best.box;
+
+      // center-based smoothing
+      let cx = fx + fw / 2;
+      let cy = fy + fh / 2;
+      let ncx = bx + bw / 2;
+      let ncy = by + bh / 2;
+
+      // clamp movement (prevents jumps)
+      const dx = Math.max(-this.MAX_MOVE, Math.min(this.MAX_MOVE, ncx - cx));
+      const dy = Math.max(-this.MAX_MOVE, Math.min(this.MAX_MOVE, ncy - cy));
+
+      cx += dx * (1 - this.CENTER_ALPHA);
+      cy += dy * (1 - this.CENTER_ALPHA);
+
+      // size smoothing
+      const sw = fw * this.SIZE_ALPHA + bw * (1 - this.SIZE_ALPHA);
+      const sh = fh * this.SIZE_ALPHA + bh * (1 - this.SIZE_ALPHA);
+
+      // reconstruct box
+      this.focused.box = [
+        cx - sw / 2,
+        cy - sh / 2,
+        sw,
+        sh,
+      ];
+
+      // confidence smoothing
+      this.focused.score =
+        this.focused.score * 0.85 +
+        best.score * 0.15;
+    } else {
+      // Ignore new object → keep old focus
+      this.focused.score *= 0.95;
+      if (this.focused.score < CONF_DROP) {
+        this.focused = best;
       }
     }
 
-    this.tracked = updated;
-
-    /* -------- DRAW -------- */
-    for (const t of this.tracked) {
-      const [x, y, w, h] = t.box;
-
-      const px = x * scaleX;
-      const py = y * scaleY;
-      const pw = w * scaleX;
-      const ph = h * scaleY;
-
-      ctx.strokeRect(px, py, pw, ph);
-      ctx.fillText(
-        `${yoloClasses[t.classId]} ${(t.score * 100).toFixed(1)}%`,
-        px,
-        py > 12 ? py - 5 : py + 15
-      );
-    }
+    this.drawBox(ctx, this.focused, scaleX, scaleY);
   }
+
 
   /* -------------------- IOU -------------------- */
 
@@ -258,4 +287,26 @@ export class YoloComponent implements AfterViewInit, OnDestroy {
 
     return inter / union;
   }
+
+  drawBox(
+    ctx: CanvasRenderingContext2D,
+    t: StableBox,
+    scaleX: number,
+    scaleY: number
+  ) {
+    const [x, y, w, h] = t.box;
+
+    const px = x * scaleX;
+    const py = y * scaleY;
+    const pw = w * scaleX;
+    const ph = h * scaleY;
+
+    ctx.strokeRect(px, py, pw, ph);
+    ctx.fillText(
+      `${yoloClasses[t.classId]} ${(t.score * 100).toFixed(1)}%`,
+      px,
+      py > 12 ? py - 5 : py + 15
+    );
+  }
+
 }
