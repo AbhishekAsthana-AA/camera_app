@@ -1,0 +1,23 @@
+.camera-wrapper {
+  position: fixed;
+  inset: 0;
+  background: black;
+  overflow: hidden;
+}
+
+video,
+canvas {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain; /* 🔥 critical */
+}
+video {
+  z-index: 1;
+}
+
+canvas {
+  z-index: 2;
+  pointer-events: none;
+}
